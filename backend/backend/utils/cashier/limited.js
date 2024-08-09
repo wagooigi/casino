@@ -167,30 +167,42 @@ const cashierLimitedGetItems = () => {
 }
 
 const cashierLimitedGetItemImages = async(itemIds) => {
+    const maxRetries = 5; // Maximum number of retries
+    const delay = ms => new Promise(resolve => setTimeout(resolve, ms)); // Delay function
+
     return new Promise(async(resolve, reject) => {
         try {
-            // Create limited images array
             let limitedImages = [];
 
-            // Get limited images and add to images array
             for(let i = 0; i <= Math.floor(itemIds.length / 100); i++) {
-                // Send get limited items images request
-                let response = await fetch(`https://thumbnails.roblox.com/v1/assets?assetIds=${itemIds.slice(i * 100, (i + 1) * 100).join(',')}&size=110x110&format=png`);
+                let attempts = 0;
 
-                // Check if the response is successful
-                if(response.ok) {
-                    response = await response.json();
-                    limitedImages = [ ...limitedImages, ...response.data ];
-                } else {
-                    reject(new Error(response.statusText));
+                while (attempts <= maxRetries) {
+                    try {
+                        let response = await fetch(`https://thumbnails.roblox.com/v1/assets?assetIds=${itemIds.slice(i * 100, (i + 1) * 100).join(',')}&size=110x110&format=png`);
+
+                        if(response.ok) {
+                            response = await response.json();
+                            limitedImages = [...limitedImages, ...response.data];
+                            break; // If request is successful, exit the retry loop
+                        } else {
+                            throw new Error(response.statusText);
+                        }
+                    } catch (err) {
+                        attempts++;
+                        if (attempts > maxRetries) {
+                            reject(new Error(`Failed after ${maxRetries} attempts: ${err.message}`));
+                        } else {
+                            await delay(1000 * Math.pow(2, attempts)); // Exponential backoff
+                        }
+                    }
                 }
 
-                // Wait for 500ms
-                await new Promise((resolve) => setTimeout(resolve, 1000));
+                await delay(1000); // Additional delay to space out requests
             }
 
             resolve(limitedImages);
-        } catch(err) {
+        } catch (err) {
             reject(err);
         }
     });
@@ -204,277 +216,4 @@ const cashierGetUserCanTrade = (proxy, robloxCookie, userId) => {
 
             // Create header object
             let headers = {
-                'cookie': `.ROBLOSECURITY=${robloxCookie}`
-            };
-
-            // Send get user can trade request
-            let response = await fetch(`https://trades.roblox.com/v1/users/${userId}/can-trade-with`, {
-                agent: proxyAgent,
-                headers: headers
-            });
-
-            // Check if the response is successful
-            if(response.ok) {
-                response = await response.json();
-                resolve(response);
-            } else if(response.status === 401) {
-                reject({ relogin: true });
-            } else {
-                reject(new Error(response.statusText));
-            }
-        } catch(err) {
-            reject(err);
-        }
-    });
-}
-
-const cashierLimitedGetTransaction = (proxy, robloxCookie, tradeId) => {
-    return new Promise(async(resolve, reject) => {
-        try {
-            // Create new proxy agent
-            const proxyAgent = new HttpsProxyAgent(proxy);
-
-            // Create header object
-            let headers = {
-                'cookie': `.ROBLOSECURITY=${robloxCookie}`
-            };
-
-            // Send get user can trade request
-            let response = await fetch(`https://trades.roblox.com/v1/trades/${tradeId}`, {
-                agent: proxyAgent,
-                headers: headers
-            });
-
-            // Check if the response is successful
-            if(response.ok) {
-                response = await response.json();
-                resolve(response);
-            } else {
-                reject(new Error(response.statusText));
-            }
-        } catch(err) {
-            reject(err);
-        }
-    });
-}
-
-const cashierSendLimitedTwoStepRedeem = (token, proxy, robloxCookie, body) => {
-    return new Promise(async(resolve, reject) => {
-        try {
-            // Create new proxy agent
-            const proxyAgent = new HttpsProxyAgent(proxy);
-
-            // Create headers object
-            let headers = {
-                'content-type': 'application/json;charset=UTF-8',
-                'x-csrf-token': token,
-                'cookie': `.ROBLOSECURITY=${robloxCookie}`
-            };
-
-            // Send redeem two step challenge request
-            let response = await fetch(`https://trades.roblox.com/v1/trade-friction/two-step-verification/redeem`, {
-                method: 'POST',
-                agent: proxyAgent,
-                headers: headers,
-                body: JSON.stringify(body)
-            });
-
-            // Check if the response is successful
-            if(response.ok) {
-                response = await response.json();
-                console.log(response);
-                resolve();
-            } else if(response.status === 401) {
-                reject({ relogin: true });
-            } else {
-                reject(new Error(response.statusText));
-            }
-        } catch(err) {
-            reject(err);
-        }
-    });
-}
-
-const cashierLimitedSendTrade = (token, proxy, robloxCookie, body) => {
-    return new Promise(async(resolve, reject) => {
-        try {
-            // Create new proxy agent
-            const proxyAgent = new HttpsProxyAgent(proxy);
-
-            // Create header object
-            let headers = {
-                'content-type': 'application/json;charset=UTF-8',
-                'x-csrf-token': token,
-                'cookie': `.ROBLOSECURITY=${robloxCookie}`
-            };
-
-            // Send roblox limited trade request
-            let response = await fetch(`https://trades.roblox.com/v1/trades/send`, {
-                method: 'POST',
-                agent: proxyAgent,
-                headers: headers,
-                body: JSON.stringify(body)
-            });
-
-            // Check if the response is successful
-            if(response.ok) {
-                response = await response.json();
-                resolve({ success: true, tradeId: response.id });
-            } else {
-                resolve({ success: false });
-            }
-        } catch(err) {
-            resolve({ success: false });
-        }
-    });
-}
-
-const cashierLimitedSendTradeAccept = (token, proxy, robloxCookie, tradeId) => {
-    return new Promise(async(resolve, reject) => {
-        try {
-            // Create new proxy agent
-            const proxyAgent = new HttpsProxyAgent(proxy);
-
-            // Create header object
-            let headers = {
-                'x-csrf-token': token,
-                'cookie': `.ROBLOSECURITY=${robloxCookie}`
-            };
-
-            // Send accept roblox limited trade request
-            let response = await fetch(`https://trades.roblox.com/v1/trades/${tradeId}/accept`, {
-                method: 'POST',
-                agent: proxyAgent,
-                headers: headers
-            });
-
-            // Check if the response is successful
-            if(response.ok) {
-                response = await response.json();
-                resolve({ success: true, tradeId: tradeId });
-            } else {
-                resolve({ success: false, tradeId: tradeId });
-            }
-        } catch(err) {
-            resolve({ success: false, tradeId: tradeId });
-        }
-    });
-}
-
-const cashierLimitedSendTradeDecline = (token, proxy, robloxCookie, tradeId) => {
-    return new Promise(async(resolve, reject) => {
-        try {
-            // Create new proxy agent
-            const proxyAgent = new HttpsProxyAgent(proxy);
-
-            // Create header object
-            let headers = {
-                'x-csrf-token': token,
-                'cookie': `.ROBLOSECURITY=${robloxCookie}`
-            };
-
-            // Send accept roblox limited trade request
-            let response = await fetch(`https://trades.roblox.com/v1/trades/${tradeId}/decline`, {
-                method: 'POST',
-                agent: proxyAgent,
-                headers: headers
-            });
-
-            // Check if the response is successful
-            if(response.ok) {
-                response = await response.json();
-                resolve({ success: true, tradeId: tradeId });
-            } else {
-                resolve({ success: false, tradeId: tradeId });
-            }
-        } catch(err) {
-            resolve({ success: false, tradeId: tradeId });
-        }
-    });
-}
-
-const cashierLimitedFormatItems = (inventoryRoblox, itemsDatabase) => {
-    let formated = [];
-
-    for(const item of inventoryRoblox) {
-        const index = itemsDatabase.findIndex((element) => element.assetId.toString() === item.assetId.toString());
-
-        if(index !== -1) {
-            formated.push({
-                uniqueId: item.userAssetId,
-                assetId: item.assetId,
-                name: item.name,
-                image: itemsDatabase[index].image,
-                amount: itemsDatabase[index].amount
-            });
-        }
-    }
-
-    return formated;
-}
-
-const cashierLimitedFormatDepositItems = (data, itemsDatabase) => {
-    let formated = [];
-
-    for(const item of data.items) {
-        const index = itemsDatabase.findIndex((element) => element.uniqueId === item.uniqueId);
-        if(index !== -1) { formated.push(itemsDatabase[index]); }
-    }
-
-    return formated;
-}
-
-const cashierLimitedFormatTransactions = (transactions) => {
-    let formated = [];
-
-    for(const transaction of transactions) {
-        formated.push({
-            _id: transaction._id,
-            amount: transaction.amount,
-            items: transaction.deposit.items,
-            user: transaction.deposit.user._id || transaction.deposit.user,
-            state: transaction.state
-        });
-    }
-
-    return formated;
-}
-
-const cashierLimitedFormatTransaction = (transaction) => {
-    return {
-        _id: transaction._id,
-        amount: transaction.amount,
-        items: transaction.deposit.items,
-        user: transaction.deposit.user._id || transaction.deposit.user,
-        state: transaction.state
-    }
-}
-
-module.exports = {
-    cashierCheckSendLimitedEnableRoblox,
-    cashierCheckSendLimitedGenerateType,
-    cashierCheckSendLimitedVerifyData,
-    cashierCheckSendLimitedVerifyRoblox,
-    cashierCheckSendLimitedDepositData,
-    cashierCheckSendLimitedDepositRoblox,
-    cashierCheckSendLimitedDepositItems,
-    cashierCheckSendLimitedDepositUser,
-    cashierCheckSendLimitedWithdrawData,
-    cashierCheckSendLimitedWithdrawRoblox,
-    cashierCheckSendLimitedWithdrawTransaction,
-    cashierCheckSendLimitedWithdrawUser,
-    cashierLimitedGetDummyItem,
-    cashierLimitedGetInventory,
-    cashierLimitedGetItems,
-    cashierLimitedGetItemImages,
-    cashierGetUserCanTrade,
-    cashierLimitedGetTransaction,
-    cashierSendLimitedTwoStepRedeem,
-    cashierLimitedSendTrade,
-    cashierLimitedSendTradeAccept,
-    cashierLimitedSendTradeDecline,
-    cashierLimitedFormatItems,
-    cashierLimitedFormatDepositItems,
-    cashierLimitedFormatTransactions,
-    cashierLimitedFormatTransaction
-}
+               
